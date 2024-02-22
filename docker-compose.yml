@@ -1,0 +1,14 @@
+version: '3.7'
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    container_name: bot
+    networks:
+      - net
+
+networks:
+  net:
+    driver: bridge
