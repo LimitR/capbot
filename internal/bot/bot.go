@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"capbot/internal/config"
 	"capbot/internal/user"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -14,9 +15,10 @@ type Bot struct {
 	api     *tgbotapi.BotAPI
 	storage map[int64]*user.User
 	counter map[int64]int
+	config  *config.Config
 }
 
-func NewBot(token string) (*Bot, error) {
+func NewBot(token string, config *config.Config) (*Bot, error) {
 	bot, err := tgbotapi.NewBotAPI(token)
 	// bot.Debug = true
 
@@ -27,6 +29,7 @@ func NewBot(token string) (*Bot, error) {
 		api:     bot,
 		storage: make(map[int64]*user.User, 10),
 		counter: make(map[int64]int, 10),
+		config:  config,
 	}, nil
 }
 
@@ -52,7 +55,7 @@ func (b *Bot) Run() {
 				for _, userMember := range chatMem {
 					b.storage[userMember.ID] = user.NewUser(userMember.ID, update.FromChat().ID)
 					b.counter[userMember.ID] = 2
-					msg := tgbotapi.NewMessage(update.FromChat().ID, fmt.Sprintf("Добро пожаловать, @%s!\n\nПодтвердите, что вы не бот, у вас есть 2 попытки и 5 минут.\n\n"+b.storage[userMember.ID].GetString(), userMember.UserName))
+					msg := tgbotapi.NewMessage(update.FromChat().ID, fmt.Sprintf(b.config.HelloText+b.storage[userMember.ID].GetString(), userMember.UserName))
 					msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 						tgbotapi.NewInlineKeyboardRow(
 							b.GetInlineKeyboard(userMember.ID)...,
@@ -73,7 +76,7 @@ func (b *Bot) Run() {
 			if ok && update.CallbackQuery.From.ID == usr.Id {
 				if usr.Validate(update.CallbackQuery.Data) {
 					chatId := update.CallbackQuery.Message.Chat.ChatConfig().ChatID
-					msg := tgbotapi.NewMessage(chatId, "Вы успешно прошли капчу, спасибо.")
+					msg := tgbotapi.NewMessage(chatId, b.config.SuccessText)
 					m, _ := b.api.Send(msg)
 					delete(b.storage, update.CallbackQuery.From.ID)
 					delete(b.counter, update.CallbackQuery.From.ID)
@@ -109,7 +112,7 @@ func (b *Bot) Run() {
 
 		//Delete user and banned
 		for _, usr := range b.storage {
-			if time.Now().UnixMilli()-usr.Time.UnixMilli() > 60_000*5 {
+			if time.Now().UnixMilli()-usr.Time.UnixMilli() > int64(b.config.TimeBan) {
 				ban := tgbotapi.BanChatMemberConfig{
 					ChatMemberConfig: tgbotapi.ChatMemberConfig{
 						ChatID:             usr.ChatId,
